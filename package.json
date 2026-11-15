@@ -1,0 +1,43 @@
+{
+  "name": "relayproof",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "node --env-file-if-exists=.env --import tsx --test tests/*.test.ts",
+    "test:integration": "node --env-file-if-exists=.env --import tsx --test tests/integration/*.test.ts",
+    "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/migrate.ts",
+    "db:demo": "node --env-file-if-exists=.env --import tsx scripts/demo.ts",
+    "worker": "node --env-file-if-exists=.env --import tsx scripts/worker.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ec2": "^3.1000.0",
+    "@fontsource-variable/dm-sans": "^5.2.0",
+    "@fontsource-variable/manrope": "^5.2.0",
+    "@workos-inc/node": "^9.0.0",
+    "ipaddr.js": "^2.3.0",
+    "lucide-react": "^0.577.0",
+    "next": "16.4.6",
+    "nodemailer": "10.5.0",
+    "pg": "^8.20.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tsx": "^4.21.0",
+    "zod": "^4.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/nodemailer": "^7.0.0",
+    "@types/pg": "^8.15.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.3"
+  }
+}

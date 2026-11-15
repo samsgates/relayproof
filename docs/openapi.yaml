@@ -1,0 +1,206 @@
+openapi: 3.1.0
+info:
+  title: RelayProof Workspace API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /workspaces/{workspaceId}/overview:
+    parameters: [{$ref: '#/components/parameters/Workspace'}]
+    get:
+      operationId: getOverview
+      responses:
+        '200': {description: Workspace counts, connections, rules, series, and recent runs}
+  /workspaces/{workspaceId}/exceptions:
+    parameters: [{$ref: '#/components/parameters/Workspace'}]
+    get:
+      operationId: listExceptions
+      parameters:
+        - {in: query, name: cursor, schema: {type: string}}
+        - {in: query, name: state, schema: {enum: [open, acknowledged, suppressed, resolved, dismissed]}}
+        - {in: query, name: severity, schema: {enum: [critical, high, medium, low]}}
+        - {in: query, name: owner, schema: {type: string}, description: Workspace user UUID or unassigned}
+        - {in: query, name: rule, schema: {type: string, format: uuid}}
+        - {in: query, name: from, schema: {type: string, format: date}}
+        - {in: query, name: to, schema: {type: string, format: date}}
+      responses:
+        '200': {description: Ordered exception items and a nullable nextCursor}
+  /workspaces/{workspaceId}/exceptions/{id}:
+    parameters: [{$ref: '#/components/parameters/Workspace'}, {$ref: '#/components/parameters/Id'}]
+    get:
+      operationId: getException
+      responses:
+        '200': {description: Exception evidence and activity history}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      operationId: changeException
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, action]
+              properties:
+                version: {type: integer, minimum: 1}
+                action: {enum: [assign, acknowledge, suppress, dismiss, comment]}
+                ownerId: {type: [string, 'null'], format: uuid}
+                until: {type: string, format: date-time}
+                note: {type: string, maxLength: 500}
+      responses:
+        '200': {description: Updated}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Stale occurrence version}
+        '422': {$ref: '#/components/responses/Invalid'}
+  /workspaces/{workspaceId}/connections:
+    parameters: [{$ref: '#/components/parameters/Workspace'}]
+    post:
+      operationId: saveConnection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, label, settings, credentials]
+              properties:
+                provider: {enum: [servicenow, jira, github, entra, aws]}
+                label: {type: string}
+                host: {type: string, format: uri}
+                settings: {type: object}
+                credentials: {type: object, writeOnly: true, description: Provider-specific credential fields}
+      responses:
+        '200': {description: Connection ID}
+        '422': {$ref: '#/components/responses/Invalid'}
+  /workspaces/{workspaceId}/rules:
+    parameters: [{$ref: '#/components/parameters/Workspace'}]
+    post:
+      operationId: createRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, module, config]
+              properties:
+                name: {type: string}
+                module: {enum: [tickets, changes, offboarding, cmdb, sla, msp, claims, upgrade, knowledge]}
+                config:
+                  type: object
+                  properties:
+                    source: {enum: [live, evidence], default: evidence}
+                    intervalMinutes: {type: integer, minimum: 5, maximum: 1440}
+                    graceMinutes: {type: integer, minimum: 0, maximum: 1440}
+                    ownerId: {type: string, format: uuid}
+                    severity: {enum: [critical, high, medium, low]}
+                    settings: {type: object}
+      responses:
+        '200': {description: Rule ID}
+        '422': {$ref: '#/components/responses/Invalid'}
+  /workspaces/{workspaceId}/rules/{id}/preview:
+    parameters: [{$ref: '#/components/parameters/Workspace'}, {$ref: '#/components/parameters/Id'}]
+    post:
+      operationId: previewRule
+      requestBody: {$ref: '#/components/requestBodies/Evidence'}
+      responses:
+        '200': {description: Preview count, bounded findings, and report}
+        '422': {$ref: '#/components/responses/Invalid'}
+  /workspaces/{workspaceId}/rules/{id}/evidence:
+    parameters: [{$ref: '#/components/parameters/Workspace'}, {$ref: '#/components/parameters/Id'}]
+    post:
+      operationId: saveEvidence
+      requestBody: {$ref: '#/components/requestBodies/Evidence'}
+      responses:
+        '200': {description: Evidence input ID}
+        '422': {$ref: '#/components/responses/Invalid'}
+  /workspaces/{workspaceId}/rules/{id}/publish:
+    parameters: [{$ref: '#/components/parameters/Workspace'}, {$ref: '#/components/parameters/Id'}]
+    post:
+      operationId: publishRule
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {description: Published version}
+        '422': {$ref: '#/components/responses/Invalid'}
+  /workspaces/{workspaceId}/runs:
+    parameters: [{$ref: '#/components/parameters/Workspace'}]
+    post:
+      operationId: queueRun
+      parameters: [{$ref: '#/components/parameters/Dedupe'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ruleId, kind]
+              properties:
+                ruleId: {type: string, format: uuid}
+                kind: {enum: [baseline, evaluate]}
+      responses:
+        '202': {description: Run ID}
+        '409': {description: Idempotency conflict}
+  /workspaces/{workspaceId}/runs/{id}:
+    parameters: [{$ref: '#/components/parameters/Workspace'}, {$ref: '#/components/parameters/Id'}]
+    get:
+      operationId: getRun
+      responses:
+        '200': {description: Status, timestamps, error category, and run report}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /workspaces/{workspaceId}/exports:
+    parameters: [{$ref: '#/components/parameters/Workspace'}]
+    post:
+      operationId: queueExport
+      parameters: [{$ref: '#/components/parameters/Dedupe'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                state: {enum: [open, acknowledged, suppressed, resolved, dismissed]}
+                severity: {enum: [critical, high, medium, low]}
+      responses:
+        '202': {description: Export ID}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /workspaces/{workspaceId}/exports/{id}:
+    parameters: [{$ref: '#/components/parameters/Workspace'}, {$ref: '#/components/parameters/Id'}]
+    get:
+      operationId: downloadExport
+      responses:
+        '200':
+          description: Download
+          content:
+            text/csv:
+              schema: {type: string}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+components:
+  securitySchemes:
+    sessionCookie: {type: apiKey, in: cookie, name: relay_session}
+  parameters:
+    Workspace: {in: path, name: workspaceId, required: true, schema: {type: string, format: uuid}}
+    Id: {in: path, name: id, required: true, schema: {type: string, format: uuid}}
+    Dedupe: {in: header, name: Idempotency-Key, schema: {type: string, minLength: 8, maxLength: 128}}
+  requestBodies:
+    Empty:
+      required: true
+      content:
+        application/json:
+          schema: {type: object}
+    Evidence:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [sample]
+            properties:
+              sample: {type: object, description: See the workspace example or lib/rules.ts for the selected module}
+  responses:
+    NotFound: {description: Missing or inaccessible resource}
+    Forbidden: {description: Access denied by origin check or workspace role}
+    Invalid: {description: Schema, permissions, or provider configuration validation failed}

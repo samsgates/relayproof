@@ -1,0 +1,61 @@
+name: relayproof
+x-app-settings: &app-settings
+  APP_URL: ${APP_URL:?Set APP_URL}
+  COOKIE_SECURE: ${COOKIE_SECURE:-true}
+  ALLOW_SIGNUP: ${ALLOW_SIGNUP:-false}
+  DATABASE_URL: postgresql://relay_app:${DB_APP_PASSWORD:?Set DB_APP_PASSWORD}@db:5432/relayproof
+  RELAY_ENCRYPTION_KEY: ${RELAY_ENCRYPTION_KEY:?Set RELAY_ENCRYPTION_KEY}
+  WORKOS_API_KEY: ${WORKOS_API_KEY:-}
+  WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
+  JIRA_CLIENT_ID: ${JIRA_CLIENT_ID:-}
+  JIRA_CLIENT_SECRET: ${JIRA_CLIENT_SECRET:-}
+  SERVICENOW_CUSTOM_HOSTS: ${SERVICENOW_CUSTOM_HOSTS:-}
+  SMTP_URL: ${SMTP_URL:-}
+  MAIL_FROM: ${MAIL_FROM:-}
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: relayproof
+      POSTGRES_USER: relay_admin
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD:?Set DB_ADMIN_PASSWORD}
+    volumes:
+      - pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U relay_admin -d relayproof"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+  migrate:
+    build: {context: ., target: worker}
+    environment:
+      <<: *app-settings
+      DATABASE_ADMIN_URL: postgresql://relay_admin:${DB_ADMIN_PASSWORD}@db:5432/relayproof
+    depends_on:
+      db: {condition: service_healthy}
+    command: ["node","--import","tsx","scripts/migrate.ts"]
+  web:
+    build: {context: ., target: web}
+    environment: *app-settings
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    ports:
+      - "127.0.0.1:${LOCAL_PORT:-3000}:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD","node","-e","fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 20s
+      timeout: 4s
+      retries: 5
+    security_opt: ["no-new-privileges:true"]
+  worker:
+    build: {context: ., target: worker}
+    environment: *app-settings
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+    stop_grace_period: 180s
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  pg:
